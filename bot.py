@@ -156,8 +156,6 @@ async def connect(request: Request):
         return JSONResponse({"status": False, "reason": "Invalid or expired key"}, status_code=403)
 
     # چیک کریں کہ مالک بلاک ہے یا نہیں
-    # فرض کریں مالک کی بلاک اسٹیٹس keys فائل کے اندر کسی بھی key کے ذریعے نہیں بلکہ آپ کسی الگ طریقے سے مینیج کرتے ہیں
-    # ہم یہاں فرض کر لیتے ہیں کہ مالک بلاک ہے اگر keys میں مالک کے کسی بھی key پر blocked=True ہو (یا آپ الگ فائل استعمال کریں)
     owner_blocked = False
     for k, v in keys.get(owner_id, {}).items():
         if v.get("blocked", False):
@@ -177,7 +175,7 @@ async def connect(request: Request):
     if key_data.get("blocked", False):
         return JSONResponse({"status": False, "reason": "Key is blocked"}, status_code=403)
 
-    # باقی expiry اور device limit چیک وہی رہیں گے
+    # expiry چیک کریں یا نیا expiry generate کریں
     expiry_str = key_data.get("expiry", "")
     if expiry_str:
         try:
@@ -210,7 +208,8 @@ async def connect(request: Request):
         "status": True,
         "data": {
             "token": token,
-            "rng": rng
+            "rng": rng,
+            "expiry": expiry_date.strftime("%Y-%m-%d")
         }
     })
 
