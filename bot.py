@@ -931,26 +931,47 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✏️ Send your custom access key like:\n`ACCESSKEY 7d 2v`", parse_mode="Markdown")
         user_data["awaiting_custom_access_key"] = True
 
+# --- بوٹس رن کرنے والا فنکشن ---
 async def run_bot():
-    BOT_TOKEN = os.environ["BOT_TOKEN"]
-    application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
+    tokens = []
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_messages))
-    application.add_handler(CommandHandler("blockuser", block_user_command))
-    application.add_handler(CommandHandler("unblockuser", unblock_user_command))
-    application.add_handler(CommandHandler("deleteuser", delete_user_command))
+    # Single token support
+    single = os.environ.get("BOT_TOKEN")
+    if single:
+        tokens.append(single)
 
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
+    # Multiple tokens support
+    for i in range(1, 21):
+        t = os.environ.get(f"BOT_TOKEN_{i}")
+        if t:
+            tokens.append(t)
 
+    if not tokens:
+        print("❌ No tokens found in environment.")
+        return
+
+    async def run_single(token):
+        application: Application = ApplicationBuilder().token(token).build()
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CallbackQueryHandler(button_handler))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_messages))
+        application.add_handler(CommandHandler("blockuser", block_user_command))
+        application.add_handler(CommandHandler("unblockuser", unblock_user_command))
+        application.add_handler(CommandHandler("deleteuser", delete_user_command))
+
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+
+    await asyncio.gather(*(run_single(token) for token in tokens))
+
+# --- API سرور رن کرنے والا فنکشن ---
 async def run_api():
     config = uvicorn.Config(app=app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
     server = uvicorn.Server(config)
     await server.serve()
 
+# --- مین انٹری پوائنٹ ---
 async def main():
     await asyncio.gather(run_bot(), run_api())
 
