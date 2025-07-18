@@ -156,6 +156,8 @@ async def connect(request: Request):
         return JSONResponse({"status": False, "reason": "Invalid or expired key"}, status_code=403)
 
     # چیک کریں کہ مالک بلاک ہے یا نہیں
+    # فرض کریں مالک کی بلاک اسٹیٹس keys فائل کے اندر کسی بھی key کے ذریعے نہیں بلکہ آپ کسی الگ طریقے سے مینیج کرتے ہیں
+    # ہم یہاں فرض کر لیتے ہیں کہ مالک بلاک ہے اگر keys میں مالک کے کسی بھی key پر blocked=True ہو (یا آپ الگ فائل استعمال کریں)
     owner_blocked = False
     for k, v in keys.get(owner_id, {}).items():
         if v.get("blocked", False):
@@ -175,7 +177,7 @@ async def connect(request: Request):
     if key_data.get("blocked", False):
         return JSONResponse({"status": False, "reason": "Key is blocked"}, status_code=403)
 
-    # expiry چیک کریں یا نیا expiry generate کریں
+    # باقی expiry اور device limit چیک وہی رہیں گے
     expiry_str = key_data.get("expiry", "")
     if expiry_str:
         try:
@@ -208,8 +210,7 @@ async def connect(request: Request):
         "status": True,
         "data": {
             "token": token,
-            "rng": rng,
-            "expiry": expiry_date.strftime("%Y-%m-%d")
+            "rng": rng
         }
     })
 
@@ -372,7 +373,7 @@ async def save_key_and_reply(query, context, key):
     save_keys(data)
 
     await query.edit_message_text(
-        f"✅ Key `{key}` created for {device_count if device_count != 9999 else '∞'} device(s), valid till `{expiry}` Please Again /start",
+        f"✅ Key `{key}` created for {device_count if device_count != 9999 else '∞'} device(s), valid till `{expiry}`",
         parse_mode="Markdown"
     )
 
@@ -511,7 +512,7 @@ async def show_my_access_keys(update: Update, context: ContextTypes.DEFAULT_TYPE
         label = f"{stat} {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"viewaccess_{key}")])
 
-    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_main")])
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="access_keys")])
     await query.edit_message_text("📂 *Your Access Keys:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
     
 async def block_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -580,7 +581,7 @@ async def save_access_key_and_reply(query, context, key):
     save_access_keys(access_data)
 
     await query.edit_message_text(
-        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start",
+        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}`",
         parse_mode="Markdown"
     )
     
@@ -647,7 +648,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_keys(data)
 
         await update.message.reply_text(
-            f"✅ Key `{key}` created for {devices if devices != 9999 else '∞'} device(s), valid till `{expiry}` Please Again /start",
+            f"✅ Key `{key}` created for {devices if devices != 9999 else '∞'} device(s), valid till `{expiry}`",
             parse_mode="Markdown"
         )
         return
@@ -675,7 +676,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_access_keys(access_data)
 
         await update.message.reply_text(
-            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start",
+            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}`",
             parse_mode="Markdown"
         )
         return
@@ -797,47 +798,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("❌ Key not found")
 
     elif data == "back_main":
-        user = query.from_user
-        user_id = str(user.id)
-        is_owner = user.id == OWNER_ID
-        access_keys = load_access_keys()
-
-        allowed = any(
-            str(v.get("owner")) == user_id and not v.get("blocked", False)
-            for v in access_keys.values()
-        )
-
-        if is_owner or allowed:
-            text = (
-                "🎉 *Welcome to Impossible Panel!*😍\n\n"
-                "✨ *You are a Premium Member!* 🥰\n"
-                "🟢 Your membership is *Successfully activated* ✅.\n\n"
-                "👑 *Owner:* [@Only_Possible](https://t.me/Only_Possible)\n\n"
-                "💡 To use the panel features, simply click the buttons below 👇"
-            )
-            keyboard = [
-                [InlineKeyboardButton("🔐 Generate Key", callback_data="generate_key")],
-                [InlineKeyboardButton("📂 My Keys", callback_data="my_keys")],
-                [InlineKeyboardButton("🔌 Connect URL", callback_data="connect_url")],
-                [InlineKeyboardButton("👑 Owner", url="https://t.me/Only_Possible")]
-            ]
-            if is_owner:
-                keyboard.extend([
-                    [InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")],
-                    [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")]
-                ])
-        else:
-            text = (
-                "🔐 *Welcome to Impossible Panel!*\n\n"
-                "🚫 You are not authorized yet.\n"
-                "🎫 To get access, buy a key from @Only_Possible"
-            )
-            keyboard = [
-                [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
-            ]
+        keyboard = [
+            [InlineKeyboardButton("🔐 Generate Key", callback_data="generate_key")],
+            [InlineKeyboardButton("📂 My Keys", callback_data="my_keys")],
+            [InlineKeyboardButton("🔌 Connect URL", callback_data="connect_url")]
+        ]
+        if query.from_user.id == OWNER_ID:
+            keyboard.append([InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")])
+            keyboard.append([InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")])
 
         await query.edit_message_text(
-            text,
+            "🎉 *Welcome to Impossible Panel!*\n\nUse buttons below to manage your license keys:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
@@ -930,47 +901,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✏️ Send your custom access key like:\n`ACCESSKEY 7d 2v`", parse_mode="Markdown")
         user_data["awaiting_custom_access_key"] = True
 
-# --- بوٹس رن کرنے والا فنکشن ---
 async def run_bot():
-    tokens = []
+    BOT_TOKEN = os.environ["BOT_TOKEN"]
+    application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Single token support
-    single = os.environ.get("BOT_TOKEN")
-    if single:
-        tokens.append(single)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_messages))
+    application.add_handler(CommandHandler("blockuser", block_user_command))
+    application.add_handler(CommandHandler("unblockuser", unblock_user_command))
+    application.add_handler(CommandHandler("deleteuser", delete_user_command))
 
-    # Multiple tokens support
-    for i in range(1, 21):
-        t = os.environ.get(f"BOT_TOKEN_{i}")
-        if t:
-            tokens.append(t)
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
 
-    if not tokens:
-        print("❌ No tokens found in environment.")
-        return
-
-    async def run_single(token):
-        application: Application = ApplicationBuilder().token(token).build()
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CallbackQueryHandler(button_handler))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_messages))
-        application.add_handler(CommandHandler("blockuser", block_user_command))
-        application.add_handler(CommandHandler("unblockuser", unblock_user_command))
-        application.add_handler(CommandHandler("deleteuser", delete_user_command))
-
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling()
-
-    await asyncio.gather(*(run_single(token) for token in tokens))
-
-# --- API سرور رن کرنے والا فنکشن ---
 async def run_api():
     config = uvicorn.Config(app=app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
     server = uvicorn.Server(config)
     await server.serve()
 
-# --- مین انٹری پوائنٹ ---
 async def main():
     await asyncio.gather(run_bot(), run_api())
 
