@@ -230,14 +230,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_owner = user.id == OWNER_ID
 
     access_keys = load_access_keys()
-    print("Access Keys Data:", access_keys)
+    blocked_users = load_blocked_users()
 
-    user_in_keys = any(str(v.get("owner")) == user_id for v in access_keys.values())
-    allowed = any(str(v.get("owner")) == user_id and not v.get("blocked", False) for v in access_keys.values())
-
-    print(f"User {user_id} | is_owner: {is_owner} | allowed: {allowed} | in_keys: {user_in_keys}")
-
-    if is_owner or allowed:
+    # ✅ 1. Blocked Check
+    if user_id in blocked_users:
+        text = (
+            "⛔ *Your access has been blocked by the owner.*\n\n"
+            "To appeal or request unblocking, please contact the owner below 👇"
+        )
+        keyboard = [
+            [InlineKeyboardButton("📞 Contact Owner", url="https://t.me/Only_Possible")]
+        ]
+    
+    # ✅ 2. Device Check in access_keys
+    elif any(user_id in v.get("devices", []) and not v.get("blocked", False) for v in access_keys.values()) or is_owner:
         text = (
             "🎉 *Welcome to Impossible Panel!*😍\n\n"
             "✨ *You are a Premium Member!* 🥰\n"
@@ -257,20 +263,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")],
                 [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
             ])
-    
-    # ✅ BLOCKED/DELETED: user was in access_keys but is now not allowed
-    elif user_in_keys and not allowed:
-        text = (
-            "⛔ *Your access key has been blocked or deleted.*\n\n"
-            "If you believe this is a mistake or want to request unblocking,\n"
-            "please contact the owner using the button below 👇"
-        )
-        keyboard = [
-            [InlineKeyboardButton("📞 Contact Owner", url="https://t.me/Only_Possible")]
-        ]
 
-    # ✅ UNAUTHORIZED (new user, never had key)
-    elif not user_in_keys:
+    # ✅ 3. New user – not in devices, not blocked
+    else:
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
             "🚫 You are not authorized yet.\n"
@@ -279,10 +274,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
         ]
-
-    else:
-        print("❌ Unexpected state — no valid message for this user.")
-        return
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -309,9 +300,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 disable_web_page_preview=True
             )
-        print(f"✅ Message sent to user {user_id}")
     except Exception as e:
-        print(f"❌ Failed to send message to {user_id}: {e}")
+        print(f"❌ Failed to send start message to user {user_id}: {e}")
 
 def generate_random_key(length=12):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -565,7 +555,7 @@ async def show_my_access_keys(update: Update, context: ContextTypes.DEFAULT_TYPE
         label = f"🚫 {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"viewaccess_{key}")])
 
-    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_main")])
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="access_keys")])
 
     await query.edit_message_text(
         "📂 *Your Access Keys:*",
