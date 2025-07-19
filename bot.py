@@ -431,25 +431,39 @@ async def show_my_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_key_detail(update: Update, context: ContextTypes.DEFAULT_TYPE, key: str):
     query = update.callback_query
     user_id = str(query.from_user.id)
-    data_json = load_keys()
 
-    key_data = data_json.get(user_id, {}).get(key)
-    if not key_data:
+    access_data = load_json(ACCESS_FILE)
+    blocked_data = load_json(BLOCKED_USERS_FILE)
+
+    # دونوں میں تلاش کریں
+    if key in access_data:
+        key_data = access_data[key]
+        is_blocked = False
+    elif key in blocked_data:
+        key_data = blocked_data[key]
+        is_blocked = True
+    else:
         await query.edit_message_text("❌ Key not found.")
         return
 
-    max_d = key_data["max_devices"]
-    used_d = len(key_data["devices"])
-    blocked = key_data.get("blocked", False)
-    exp = key_data["expiry"]
+    # صرف اپنے ہی key دیکھنے دیں
+    if str(key_data.get("owner")) != user_id and str(OWNER_ID) != user_id:
+        await query.edit_message_text("❌ You are not authorized to view this key.")
+        return
 
-    status = "🚫 Blocked" if blocked else "✅ Active"
+    max_d = key_data.get("max_devices", 0)
+    used_d = len(key_data.get("devices", []))
+    exp = key_data.get("expiry", "N/A")
+
+    status = "🚫 Blocked" if is_blocked else "✅ Active"
     device_text = f"{used_d}/{max_d if max_d != 9999 else '∞'} Devices"
+
+    toggle_text = "🔓 Unblock" if is_blocked else "🛑 Block"
 
     keyboard = [
         [InlineKeyboardButton("➕ Add Time", callback_data=f"addtime_{key}"),
          InlineKeyboardButton("🔄 Reset Devices", callback_data=f"resetdev_{key}")],
-        [InlineKeyboardButton("🚫 Unblock" if blocked else "🛑 Block", callback_data=f"toggle_{key}")],
+        [InlineKeyboardButton(toggle_text, callback_data=f"access_toggle_{key}")],
         [InlineKeyboardButton("🗑️ Delete", callback_data=f"delete_{key}")],
         [InlineKeyboardButton("🔙 Back", callback_data="my_keys")]
     ]
@@ -494,7 +508,9 @@ async def show_access_key_menu(query, context):
 async def show_access_key_detail(query, context, key):
     try:
         access_data = load_access_keys()
-        key_data = access_data.get(key)
+        blocked_data = load_json(BLOCKED_USERS_FILE)
+
+        key_data = access_data.get(key) or blocked_data.get(key)
         if not key_data:
             await query.answer("❌ Access key not found!")
             return
@@ -502,11 +518,12 @@ async def show_access_key_detail(query, context, key):
         maxd = key_data.get("max_devices", 0)
         usedd = len(key_data.get("devices", []))
         exp = key_data.get("expiry", "N/A")
-        blocked = key_data.get("blocked", False)
-        status = "🚫 Blocked" if blocked else "✅ Active"
+
+        is_blocked = key in blocked_data
+        status = "🚫 Blocked" if is_blocked else "✅ Active"
 
         keyboard = [
-            [InlineKeyboardButton("🚫 Unblock" if blocked else "🛑 Block", callback_data=f"access_toggle_{key}")],
+            [InlineKeyboardButton("🔓 Unblock" if is_blocked else "🛑 Block", callback_data=f"access_toggle_{key}")],
             [InlineKeyboardButton("🗑️ Delete", callback_data=f"access_delete_{key}")],
             [InlineKeyboardButton("🔙 Back", callback_data="show_my_access_keys")]
         ]
@@ -516,8 +533,10 @@ async def show_access_key_detail(query, context, key):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
+
     except Exception as e:
         print("⚠️ Error in show_access_key_detail():")
+        import traceback
         traceback.print_exc()
         await query.answer("❌ Error displaying details!")
     
@@ -920,43 +939,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             access_data = load_access_keys()
             blocked_data = load_json(BLOCKED_USERS_FILE)
 
-            if key not in access_data:
-                await query.answer("❌ Key not found")
-                return
-
-            current_status = access_data[key].get("blocked", False)
-            user_id = str(access_data[key].get("owner"))
-
-            if not current_status:
-            # بلاک کرنا یعنی move data from access.json to blocked_users.json
+            if key in access_data:
+                user_id = str(access_data[key].get("owner"))
                 success = block_user_by_id(user_id)
                 if success:
-                # اب access_data کو دوبارہ لوڈ کریں کیونکہ block_user_by_id نے فائل بدلی ہوگی
-                    access_data = load_access_keys()
-                    await query.answer(f"🚫 User {user_id} blocked successfully.")
+                    await query.answer("🚫 User Blocked!")
+                    await show_access_key_detail(query, context, key)
                 else:
                     await query.answer("❌ Failed to block user.")
-                    return
-            else:
-            # ان بلاک کرنا یعنی move data from blocked_users.json to access.json
+            elif key in blocked_data:
+                user_id = str(blocked_data[key].get("owner"))
                 success = unblock_user_by_id(user_id)
                 if success:
-                # access_data کو اپڈیٹ کریں
-                    access_data = load_access_keys()
-                    await query.answer(f"✅ User {user_id} unblocked successfully.")
+                    await query.answer("🔓 User Unblocked!")
+                    await show_access_key_detail(query, context, key)
                 else:
                     await query.answer("❌ Failed to unblock user.")
-                    return
-
-        # چونکہ data move ہو چکا، اب saved blocked key status بدلنے کی ضرورت نہیں، 
-        # کیونکہ اصل data move ہو چکا ہے، اور جو فائلیں load/save ہوئیں وہ updated ہیں۔
-
-        # اگر آپ چاہیں تو یہاں save_access_keys() کو کال نہیں کریں کیونکہ move functions save کر چکے ہیں
-        # save_access_keys(access_data)
-
-        # اب key detail دکھائیں
-            await show_access_key_detail(query, context, key)
-
+            else:
+                await query.answer("❌ Key not found.")
         except Exception as e:
             await query.answer("❌ Error occurred!")
             print(f"⚠️ Error in access_toggle_: {e}")
