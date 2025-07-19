@@ -229,33 +229,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(user.id)
     is_owner = user.id == OWNER_ID
 
-    access_keys = load_access_keys()
-    blocked_users = load_blocked_users()
+    access_keys = load_json(ACCESS_FILE)
+    blocked_keys = load_json(BLOCKED_USERS_FILE)
 
-    # ✅ 1. Blocked Check
-    if user_id in blocked_users:
+    # ✅ Step 1: اگر user blocked ہے (یعنی اس کی ID blocked_keys میں کسی key کے اندر ہے)
+    is_blocked = any(user_id in v.get("devices", []) for v in blocked_keys.values())
+
+    if is_blocked:
         text = (
             "⛔ *Your access has been blocked by the owner.*\n\n"
             "To appeal or request unblocking, please contact the owner below 👇"
         )
         keyboard = [
-            [InlineKeyboardButton("📞 Contact Owner", url="https://t.me/Only_Possible")]
+            [InlineKeyboardButton("📞 Contact Owner", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")]
         ]
-    
-    # ✅ 2. Device Check in access_keys
+
+    # ✅ Step 2: اگر user allowed ہے (devices میں شامل ہے یا وہ owner ہے)
     elif any(user_id in v.get("devices", []) and not v.get("blocked", False) for v in access_keys.values()) or is_owner:
         text = (
             "🎉 *Welcome to Impossible Panel!*😍\n\n"
             "✨ *You are a Premium Member!* 🥰\n"
             "🟢 Your membership is *Successfully activated* ✅.\n\n"
-            "👑 *Owner:* [@Only_Possible](https://t.me/Only_Possible)\n\n"
+            f"👑 *Owner:* [{OWNER_USERNAME}](https://t.me/{OWNER_USERNAME.lstrip('@')})\n\n"
             "💡 To use the panel features, simply click the buttons below 👇"
         )
         keyboard = [
             [InlineKeyboardButton("🔐 Generate Key", callback_data="generate_key")],
             [InlineKeyboardButton("📂 My Keys", callback_data="my_keys")],
             [InlineKeyboardButton("🔌 Connect URL", callback_data="connect_url")],
-            [InlineKeyboardButton("👑 Owner", url="https://t.me/Only_Possible")]
+            [InlineKeyboardButton("👑 Owner", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")]
         ]
         if is_owner:
             keyboard.extend([
@@ -264,7 +266,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
             ])
 
-    # ✅ 3. New user – not in devices, not blocked
+    # ✅ Step 3: اگر user new ہے (na devices میں, na blocked میں)
     else:
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
@@ -272,7 +274,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎫 To get access, buy a key from 👇"
         )
         keyboard = [
-            [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
+            [InlineKeyboardButton("🛒 Buy Access Key", url=f"https://t.me/{OWNER_USERNAME.lstrip('@')}")]
         ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -300,8 +302,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 disable_web_page_preview=True
             )
+        print(f"✅ Sent start menu to user {user_id}")
     except Exception as e:
-        print(f"❌ Failed to send start message to user {user_id}: {e}")
+        print(f"❌ Error sending start message to {user_id}: {e}")
 
 def generate_random_key(length=12):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
