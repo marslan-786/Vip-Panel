@@ -548,17 +548,23 @@ async def show_my_access_keys(update: Update, context: ContextTypes.DEFAULT_TYPE
     blocked_data = load_json(BLOCKED_USERS_FILE)   # blocked keys
 
     # user کی active keys
-    active_keys = {k: v for k, v in access_data.items() if str(v.get("owner")) == user_id}
+    active_keys = {
+        k: v for k, v in access_data.items()
+        if str(v.get("owner")) == user_id or user_id in [str(d) for d in v.get("devices", [])]
+    }
+
     # user کی blocked keys
-    blocked_keys = {k: v for k, v in blocked_data.items() if str(v.get("owner")) == user_id}
+    blocked_keys = {
+        k: v for k, v in blocked_data.items()
+        if str(v.get("owner")) == user_id or user_id in [str(d) for d in v.get("devices", [])]
+    }
 
     if not active_keys and not blocked_keys:
-        await query.edit_message_text("📂 You haven't generated any access keys yet.")
+        await query.edit_message_text("📂 You haven't generated or used any access keys yet.")
         return
 
     keyboard = []
 
-    # Active keys دکھائیں ٹک ✅ کے ساتھ
     for key, info in active_keys.items():
         used = len(info.get("devices", []))
         maxd = info["max_devices"]
@@ -566,7 +572,6 @@ async def show_my_access_keys(update: Update, context: ContextTypes.DEFAULT_TYPE
         label = f"✅ {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"viewaccess_{key}")])
 
-    # Blocked keys دکھائیں بلاک 🚫 کے ساتھ
     for key, info in blocked_keys.items():
         used = len(info.get("devices", []))
         maxd = info["max_devices"]
