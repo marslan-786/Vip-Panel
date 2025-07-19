@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import asyncio
 import string
 
+
 # ─────🌐 FastAPI ─────
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -253,6 +254,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.extend([
                 [InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")],
                 [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")]
+                [InlineKeyboardButton("📥 Save Data", callback_data="save_data")],
             ])
     else:
         text = (
@@ -373,7 +375,7 @@ async def save_key_and_reply(query, context, key):
     save_keys(data)
 
     await query.edit_message_text(
-        f"✅ Key `{key}` created for {device_count if device_count != 9999 else '∞'} device(s), valid till `{expiry}` Please Again /start",
+        f"✅ Key `{key}` created for {device_count if device_count != 9999 else '∞'} device(s), valid till `{expiry}`",
         parse_mode="Markdown"
     )
 
@@ -581,9 +583,15 @@ async def save_access_key_and_reply(query, context, key):
     save_access_keys(access_data)
 
     await query.edit_message_text(
-        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start",
+        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}`",
         parse_mode="Markdown"
     )
+    
+# /backup کمانڈ
+async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [[InlineKeyboardButton("📥 Save Data", callback_data="save_data")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("👇 Save current data before redeploy:", reply_markup=reply_markup)
     
 async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = context.user_data
@@ -648,7 +656,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_keys(data)
 
         await update.message.reply_text(
-            f"✅ Key `{key}` created for {devices if devices != 9999 else '∞'} device(s), valid till `{expiry}` Please Again /start",
+            f"✅ Key `{key}` created for {devices if devices != 9999 else '∞'} device(s), valid till `{expiry}`",
             parse_mode="Markdown"
         )
         return
@@ -676,7 +684,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_access_keys(access_data)
 
         await update.message.reply_text(
-            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start",
+            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}`",
             parse_mode="Markdown"
         )
         return
@@ -806,6 +814,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.from_user.id == OWNER_ID:
             keyboard.append([InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")])
             keyboard.append([InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")])
+            keyboard.append([InlineKeyboardButton("📥 Save Data", callback_data="save_data")])
 
         await query.edit_message_text(
             "🎉 *Welcome to Impossible Panel!*\n\nUse buttons below to manage your license keys:",
@@ -900,6 +909,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "add_custom_access":
         await query.edit_message_text("✏️ Send your custom access key like:\n`ACCESSKEY 7d 2v`", parse_mode="Markdown")
         user_data["awaiting_custom_access_key"] = True
+        
+    elif query.data == "save_data":
+        files = [
+            ("data/key.json", "🔑 key.json"),
+            ("data/users.json", "👤 users.json"),
+            ("data/blocked_users.json", "🚫 blocked_users.json")
+        ]
+
+        for file_path, caption in files:
+            if os.path.exists(file_path):
+                await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, 'rb'), caption=caption)
+            else:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ File not found: `{file_path}`", parse_mode='Markdown')
 
 async def run_bot():
     BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -911,6 +933,7 @@ async def run_bot():
     application.add_handler(CommandHandler("blockuser", block_user_command))
     application.add_handler(CommandHandler("unblockuser", unblock_user_command))
     application.add_handler(CommandHandler("deleteuser", delete_user_command))
+    application.add_handler(CommandHandler("backup", backup_command))
 
     await application.initialize()
     await application.start()
