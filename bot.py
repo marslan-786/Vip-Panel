@@ -595,6 +595,19 @@ async def unblock_user_command(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = context.args[0]
     unblock_user(user_id)
     await update.message.reply_text(f"✅ User `{user_id}` has been unblocked.", parse_mode="Markdown")
+    
+async def block_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("❌ Only the owner can use this command!")
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Usage: /blockuser <user_id>")
+        return
+
+    user_id = context.args[0]
+    block_user_by_id(user_id)
+    await update.message.reply_text(f"🚫 User `{user_id}` has been blocked and all their keys are now inactive.", parse_mode="Markdown")
 
 
 async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
