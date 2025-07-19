@@ -400,7 +400,7 @@ async def save_key_and_reply(query, context, key):
     save_keys(data)
 
     await query.edit_message_text(
-        f"✅ Key `{key}` created for {device_count if device_count != 9999 else '∞'} device(s), valid till `{expiry}`",
+        f"✅ Key `{key}` created for {device_count if device_count != 9999 else '∞'} device(s), valid till `{expiry}` \n\n🔁 Please send /start to refresh the panel.",
         parse_mode="Markdown"
     )
 
@@ -435,29 +435,41 @@ async def show_key_detail(update: Update, context: ContextTypes.DEFAULT_TYPE, ke
     access_data = load_json(ACCESS_FILE)
     blocked_data = load_json(BLOCKED_USERS_FILE)
 
-    # دونوں میں تلاش کریں
-    if key in access_data:
-        key_data = access_data[key]
-        is_blocked = False
-    elif key in blocked_data:
-        key_data = blocked_data[key]
-        is_blocked = True
+    key_data = None
+    is_blocked = False
+    key_owner = None
+
+    # اگر یوزر ہے
+    if user_id != str(OWNER_ID):
+        if user_id in access_data and key in access_data[user_id]:
+            key_data = access_data[user_id][key]
+            key_owner = user_id
+        elif user_id in blocked_data and key in blocked_data[user_id]:
+            key_data = blocked_data[user_id][key]
+            key_owner = user_id
+            is_blocked = True
+        else:
+            await query.edit_message_text("❌ You are not authorized to view this key.")
+            return
+
+    # اگر اونر ہے
     else:
-        await query.edit_message_text("❌ Key not found.")
-        return
+        if key in access_data:
+            key_data = access_data[key]
+        elif key in blocked_data:
+            key_data = blocked_data[key]
+            is_blocked = True
+        else:
+            await query.edit_message_text("❌ Key not found.")
+            return
 
-    # صرف اپنے ہی key دیکھنے دیں
-    if str(key_data.get("owner")) != user_id and str(OWNER_ID) != user_id:
-        await query.edit_message_text("❌ You are not authorized to view this key.")
-        return
-
+    # ڈیٹیل بنانا
     max_d = key_data.get("max_devices", 0)
     used_d = len(key_data.get("devices", []))
     exp = key_data.get("expiry", "N/A")
 
     status = "🚫 Blocked" if is_blocked else "✅ Active"
     device_text = f"{used_d}/{max_d if max_d != 9999 else '∞'} Devices"
-
     toggle_text = "🔓 Unblock" if is_blocked else "🛑 Block"
 
     keyboard = [
@@ -579,7 +591,7 @@ async def show_my_access_keys(update: Update, context: ContextTypes.DEFAULT_TYPE
         label = f"🚫 {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"viewaccess_{key}")])
 
-    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="access_keys")])
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_main")])
 
     await query.edit_message_text(
         "📂 *Your Access Keys:*",
@@ -758,7 +770,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_keys(data)
 
         await update.message.reply_text(
-            f"✅ Key `{key}` created for {devices if devices != 9999 else '∞'} device(s), valid till `{expiry}`",
+            f"✅ Key `{key}` created for {devices if devices != 9999 else '∞'} device(s), valid till `{expiry}`\n\n🔁 Please send /start to refresh the panel.",
             parse_mode="Markdown"
         )
         return
@@ -786,7 +798,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_access_keys(access_data)
 
         await update.message.reply_text(
-            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start 😍",
+            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}` \n\n🔁 Please send /start to refresh the panel.",
             parse_mode="Markdown"
         )
         return
@@ -923,7 +935,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎉 *Welcome to Impossible Panel!*😍\n\n"
             "✨ *You are a Premium Member!* 🥰\n"
             "🟢 Your membership is *Successfully activated* ✅.\n\n"
-            "👑 *Owner:* [@Only_Possible](https://t.me/Only_Possible)\n\n"
+            "👑 *Owner:* @Only_Possible\n\n"
             "💡 To use the panel features, simply click the buttons below 👇"
         )
         keyboard = [
