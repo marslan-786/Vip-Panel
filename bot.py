@@ -5,6 +5,7 @@ import random
 import hashlib
 import traceback
 from datetime import datetime, timedelta
+from telegram.helpers import escape_markdown
 import asyncio
 import string
 
@@ -558,7 +559,7 @@ async def show_my_access_keys(update: Update, context: ContextTypes.DEFAULT_TYPE
         label = f"🚫 {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"viewaccess_{key}")])
 
-    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="access_keys")])
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_main")])
 
     await query.edit_message_text(
         "📂 *Your Access Keys:*",
@@ -905,6 +906,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "👑 *Owner:* @Only_Possible\n\n"
             "💡 To use the panel features, simply click the buttons below 👇"
         )
+        text = escape_markdown(text, version=2)
         keyboard = [
             [InlineKeyboardButton("🔐 Generate Key", callback_data="generate_key")],
             [InlineKeyboardButton("📂 My Keys", callback_data="my_keys")],
@@ -922,7 +924,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             text=text,
             reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
+            parse_mode="MarkdownV2"
         )
 
     elif data == "connect_url":
