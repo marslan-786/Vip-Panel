@@ -223,24 +223,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_owner = user.id == OWNER_ID
 
     access_keys = load_access_keys()
-    print("✅ Raw access_keys loaded:", access_keys)
+    print("Access Keys Data:", access_keys)
 
-    user_in_keys = any(
-        str(v.get("owner")) == user_id
-        for v in access_keys.values()
-    )
-    print(f"🔎 user_in_keys: {user_in_keys}")
+    user_in_keys = any(str(v.get("owner")) == user_id for v in access_keys.values())
+    allowed = any(str(v.get("owner")) == user_id and not v.get("blocked", False) for v in access_keys.values())
 
-    allowed = any(
-        str(v.get("owner")) == user_id and not v.get("blocked", False)
-        for v in access_keys.values()
-    )
-    print(f"🔐 allowed: {allowed}, is_owner: {is_owner}")
+    print(f"User {user_id} | is_owner: {is_owner} | allowed: {allowed} | in_keys: {user_in_keys}")
 
-    # CASE 1: Owner or allowed user
     if is_owner or allowed:
-        print("✅ Case: owner or allowed")
-
         text = (
             "🎉 *Welcome to Impossible Panel!*😍\n\n"
             "✨ *You are a Premium Member!* 🥰\n"
@@ -260,29 +250,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")],
                 [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
             ])
+    
+    # ✅ BLOCKED/DELETED: user was in access_keys but is now not allowed
+    elif user_in_keys and not allowed:
+        text = (
+            "⛔ *Your access key has been blocked or deleted.*\n\n"
+            "If you believe this is a mistake or want to request unblocking,\n"
+            "please contact the owner using the button below 👇"
+        )
+        keyboard = [
+            [InlineKeyboardButton("📞 Contact Owner", url="https://t.me/Only_Possible")]
+        ]
 
-    # CASE 2: access_keys is empty OR user not in keys
+    # ✅ UNAUTHORIZED (new user, never had key)
     elif not user_in_keys:
-        print("⚠️ Case: user not in keys or keys are empty")
-
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
             "🚫 You are not authorized yet.\n"
-            "🎫 To get access, buy a key from 👇"
+            "🎫 To get access, buy a key from [@Only_Possible](https://t.me/Only_Possible)"
         )
         keyboard = [
             [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
         ]
 
     else:
-        print("⛔ Case: user in keys but not allowed (blocked?) — NO MESSAGE")
+        print("❌ Unexpected state — no valid message for this user.")
         return
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
         if update.message:
-            print("📨 Sending via update.message")
             await update.message.reply_text(
                 text,
                 reply_markup=reply_markup,
@@ -290,7 +288,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 disable_web_page_preview=True
             )
         elif update.callback_query:
-            print("📨 Sending via callback_query.message")
             await update.callback_query.message.reply_text(
                 text,
                 reply_markup=reply_markup,
@@ -298,7 +295,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 disable_web_page_preview=True
             )
         else:
-            print("📨 Sending via context.bot.send_message")
             await context.bot.send_message(
                 chat_id=user.id,
                 text=text,
@@ -306,9 +302,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 disable_web_page_preview=True
             )
-        print("✅ Message sent successfully.")
+        print(f"✅ Message sent to user {user_id}")
     except Exception as e:
-        print(f"❌ Failed to send message: {e}")
+        print(f"❌ Failed to send message to {user_id}: {e}")
 
 def generate_random_key(length=12):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
