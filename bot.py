@@ -542,37 +542,45 @@ async def show_access_key_detail(query, context, key):
     
 async def show_my_access_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    access_data = load_access_keys()
+    user_id = str(query.from_user.id)
 
-    if not access_data:
+    access_data = load_access_keys()               # active keys
+    blocked_data = load_json(BLOCKED_USERS_FILE)   # blocked keys
+
+    # user کی active keys
+    active_keys = {k: v for k, v in access_data.items() if str(v.get("owner")) == user_id}
+    # user کی blocked keys
+    blocked_keys = {k: v for k, v in blocked_data.items() if str(v.get("owner")) == user_id}
+
+    if not active_keys and not blocked_keys:
         await query.edit_message_text("📂 You haven't generated any access keys yet.")
         return
 
     keyboard = []
-    for key, info in access_data.items():
+
+    # Active keys دکھائیں ٹک ✅ کے ساتھ
+    for key, info in active_keys.items():
         used = len(info.get("devices", []))
         maxd = info["max_devices"]
         exp = info["expiry"]
-        blocked = info.get("blocked", False)
-        stat = "🚫" if blocked else "✅"
-        label = f"{stat} {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
+        label = f"✅ {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"viewaccess_{key}")])
+
+    # Blocked keys دکھائیں بلاک 🚫 کے ساتھ
+    for key, info in blocked_keys.items():
+        used = len(info.get("devices", []))
+        maxd = info["max_devices"]
+        exp = info["expiry"]
+        label = f"🚫 {key} | {exp} | {used}/{maxd if maxd != 9999 else '∞'} Devices"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"viewaccess_{key}")])
 
     keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="access_keys")])
-    await query.edit_message_text("📂 *Your Access Keys:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-    
-async def block_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("❌ Only the owner can use this command!")
-        return
 
-    if len(context.args) != 1:
-        await update.message.reply_text("Usage: /blockuser <user_id>")
-        return
-
-    user_id = context.args[0]
-    block_user_and_keys(user_id)
-    await update.message.reply_text(f"🚫 User `{user_id}` has been blocked and all their keys are now inactive.", parse_mode="Markdown")
+    await query.edit_message_text(
+        "📂 *Your Access Keys:*",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
 
 async def unblock_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
