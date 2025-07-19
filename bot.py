@@ -643,17 +643,21 @@ async def save_access_key_and_reply(query, context, key):
         expiry = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
 
     access_data = load_access_keys()
-    access_data[key] = {
+
+    # ✅ owner ہمیشہ وہی ہو جو generate کر رہا ہے
+    new_key_data = {
         "devices": [],
         "max_devices": device_count,
         "expiry": expiry,
         "blocked": False,
-        "owner": str(query.from_user.id)
+        "owner": str(query.from_user.id)  # owner کو کبھی نہ بدلیں
     }
+
+    access_data[key] = new_key_data
     save_access_keys(access_data)
 
     await query.edit_message_text(
-        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start 😍",
+        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}`.\n\n🔁 Please send /start to refresh the panel.",
         parse_mode="Markdown"
     )
     
