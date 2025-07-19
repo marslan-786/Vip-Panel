@@ -72,46 +72,6 @@ def save_access_keys(data):
     with open(ACCESS_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def load_blocked_users():
-    if not os.path.exists(BLOCKED_USERS_FILE):
-        return []
-    with open(BLOCKED_USERS_FILE, "r") as f:
-        return json.load(f)
-
-def save_blocked_users(user_ids):
-    os.makedirs(os.path.dirname(BLOCKED_USERS_FILE), exist_ok=True)
-    with open(BLOCKED_USERS_FILE, "w") as f:
-        json.dump(user_ids, f, indent=2)
-
-def block_user_and_keys(user_id):
-    user_id = str(user_id)  # ensure string
-    # 1. Block user globally
-    blocked = load_blocked_users()
-    if user_id not in blocked:
-        blocked.append(user_id)
-        save_blocked_users(blocked)
-
-    # 2. Block license keys
-    data = load_keys()
-    if user_id in data:
-        for key in data[user_id]:
-            data[user_id][key]["blocked"] = True
-        save_keys(data)
-
-    # 3. Block access keys
-    access_data = load_access_keys()
-    for key, info in access_data.items():
-        if str(info.get("owner")) == user_id:
-            access_data[key]["blocked"] = True
-    save_access_keys(access_data)
-
-def unblock_user(user_id):
-    user_id = str(user_id)  # ensure string
-    blocked = load_blocked_users()
-    if user_id in blocked:
-        blocked.remove(user_id)
-        save_blocked_users(blocked)
-
 def delete_user_data(user_id):
     user_id = str(user_id)  # ensure string
     # Delete from license keys
@@ -129,6 +89,53 @@ def delete_user_data(user_id):
 
     # Unblock if exists
     unblock_user(user_id)
+    
+def load_json(file_path):
+    try:
+        with open(file_path, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_json(file_path, data):
+    with open(file_path, "w") as f:
+        json.dump(data, f, indent=4)
+
+def block_user_by_id(user_id: str):
+    access_data = load_json(ACCESS_FILE)
+    blocked_data = load_json(BLOCKED_USERS_FILE)
+
+    # صرف وہ keys جو owner == user_id ہو
+    keys_to_move = [key for key, val in access_data.items() if val.get("owner") == user_id]
+
+    if not keys_to_move:
+        return False  # user کا data access میں نہیں
+
+    # صرف user کا data move کریں
+    for key in keys_to_move:
+        blocked_data[key] = access_data.pop(key)
+
+    save_json(ACCESS_FILE, access_data)
+    save_json(BLOCKED_USERS_FILE, blocked_data)
+    return True
+
+def unblock_user_by_id(user_id: str):
+    access_data = load_json(ACCESS_FILE)
+    blocked_data = load_json(BLOCKED_USERS_FILE)
+
+    # صرف وہ keys جو owner == user_id ہو
+    keys_to_move = [key for key, val in blocked_data.items() if val.get("owner") == user_id]
+
+    if not keys_to_move:
+        return False  # user کا data blocked میں نہیں
+
+    # صرف user کا data move کریں
+    for key in keys_to_move:
+        access_data[key] = blocked_data.pop(key)
+
+    save_json(ACCESS_FILE, access_data)
+    save_json(BLOCKED_USERS_FILE, blocked_data)
+    return True
     
 
         
@@ -267,7 +274,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
             "🚫 You are not authorized yet.\n"
-            "🎫 To get access, buy a key from [@Only_Possible](https://t.me/Only_Possible)"
+            "🎫 To get access, buy a key from 👇"
         )
         keyboard = [
             [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
@@ -911,26 +918,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             key = data[len("access_toggle_"):]
             access_data = load_access_keys()
+            blocked_data = load_json(BLOCKED_USERS_FILE)
+
             if key not in access_data:
                 await query.answer("❌ Key not found")
                 return
 
             current_status = access_data[key].get("blocked", False)
-            access_data[key]["blocked"] = not current_status
             user_id = str(access_data[key].get("owner"))
 
             if not current_status:
-                block_user_and_keys(user_id)
+            # بلاک کرنا یعنی move data from access.json to blocked_users.json
+                success = block_user_by_id(user_id)
+                if success:
+                # اب access_data کو دوبارہ لوڈ کریں کیونکہ block_user_by_id نے فائل بدلی ہوگی
+                    access_data = load_access_keys()
+                    await query.answer(f"🚫 User {user_id} blocked successfully.")
+                else:
+                    await query.answer("❌ Failed to block user.")
+                    return
             else:
-                unblock_user(user_id)
+            # ان بلاک کرنا یعنی move data from blocked_users.json to access.json
+                success = unblock_user_by_id(user_id)
+                if success:
+                # access_data کو اپڈیٹ کریں
+                    access_data = load_access_keys()
+                    await query.answer(f"✅ User {user_id} unblocked successfully.")
+                else:
+                    await query.answer("❌ Failed to unblock user.")
+                    return
 
-            save_access_keys(access_data)
-            await query.answer("✅ Status Updated")
+        # چونکہ data move ہو چکا، اب saved blocked key status بدلنے کی ضرورت نہیں، 
+        # کیونکہ اصل data move ہو چکا ہے، اور جو فائلیں load/save ہوئیں وہ updated ہیں۔
+
+        # اگر آپ چاہیں تو یہاں save_access_keys() کو کال نہیں کریں کیونکہ move functions save کر چکے ہیں
+        # save_access_keys(access_data)
+
+        # اب key detail دکھائیں
             await show_access_key_detail(query, context, key)
 
         except Exception as e:
             await query.answer("❌ Error occurred!")
             print(f"⚠️ Error in access_toggle_: {e}")
+            import traceback
             traceback.print_exc()
 
     elif data.startswith("access_delete_"):
