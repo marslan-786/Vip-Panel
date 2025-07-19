@@ -254,7 +254,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.extend([
                 [InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")],
                 [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")],
-                [InlineKeyboardButton("📥 Save Data", callback_data="save_data")]
+                [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
             ])
     else:
         text = (
@@ -587,6 +587,40 @@ async def save_access_key_and_reply(query, context, key):
         parse_mode="Markdown"
     )
     
+# یہ آپ کی backup_data.py فائل ہے
+
+
+# Configs جیسا کہ تم نے بتایا تھا
+DATA_FILES = {
+    "keys.json": "data/keys.json",
+    "access.json": "data/access.json",
+    "blocked_users.json": "data/blocked_users.json"
+}
+
+async def backup_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    await context.bot.send_message(chat_id=chat_id, text="📦 Backup شروع کیا جا رہا ہے...")
+
+    for name, path in DATA_FILES.items():
+        if os.path.exists(path):
+            with open(path, "rb") as file:
+                await context.bot.send_document(
+                    chat_id=chat_id,
+                    document=file,
+                    filename=name,
+                    caption=f"✅ `{name}` کا بیک اپ",
+                    parse_mode="Markdown"
+                )
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ `{name}` فائل موجود نہیں ہے!",
+                parse_mode="Markdown"
+            )
+
+    await context.bot.send_message(chat_id=chat_id, text="📁 Backup مکمل ہو گیا ✅")
+    
 # /backup کمانڈ
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("📥 Save Data", callback_data="save_data")]]
@@ -814,7 +848,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.from_user.id == OWNER_ID:
             keyboard.append([InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")])
             keyboard.append([InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")])
-            keyboard.append([InlineKeyboardButton("📥 Save Data", callback_data="save_data")])
+            keyboard.append([InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")])
 
         await query.edit_message_text(
             "🎉 *Welcome to Impossible Panel!*\n\nUse buttons below to manage your license keys:",
@@ -922,6 +956,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, 'rb'), caption=caption)
             else:
                 await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ File not found: `{file_path}`", parse_mode='Markdown')
+                
+    elif query.data == "backup_data":
+        await backup_data_handler(update, context)
 
 async def run_bot():
     BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -933,7 +970,8 @@ async def run_bot():
     application.add_handler(CommandHandler("blockuser", block_user_command))
     application.add_handler(CommandHandler("unblockuser", unblock_user_command))
     application.add_handler(CommandHandler("deleteuser", delete_user_command))
-    application.add_handler(CommandHandler("backup", backup_command))
+    application.add_handler(CallbackQueryHandler(backup_data_handler, pattern="^backup_data$"))
+    
 
     await application.initialize()
     await application.start()
