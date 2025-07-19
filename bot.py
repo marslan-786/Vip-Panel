@@ -825,7 +825,9 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         devices.append(user_id)
         key_data["devices"] = devices
-        key_data["owner"] = user_id
+        # owner کو کبھی نہ بدلیں
+        # key_data["owner"] = user_id  <-- یہ لائن نکال دی گئی ہے
+
         access_data[text] = key_data
         save_access_keys(access_data)
         await update.message.reply_text("✅ Access granted! You can now use the panel. Use /start again.")
