@@ -431,51 +431,25 @@ async def show_my_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_key_detail(update: Update, context: ContextTypes.DEFAULT_TYPE, key: str):
     query = update.callback_query
     user_id = str(query.from_user.id)
+    data_json = load_keys()
 
-    access_data = load_json(ACCESS_FILE)
-    blocked_data = load_json(BLOCKED_USERS_FILE)
+    key_data = data_json.get(user_id, {}).get(key)
+    if not key_data:
+        await query.edit_message_text("❌ Key not found.")
+        return
 
-    key_data = None
-    is_blocked = False
-    key_owner = None
+    max_d = key_data["max_devices"]
+    used_d = len(key_data["devices"])
+    blocked = key_data.get("blocked", False)
+    exp = key_data["expiry"]
 
-    # اگر یوزر ہے
-    if user_id != str(OWNER_ID):
-        if user_id in access_data and key in access_data[user_id]:
-            key_data = access_data[user_id][key]
-            key_owner = user_id
-        elif user_id in blocked_data and key in blocked_data[user_id]:
-            key_data = blocked_data[user_id][key]
-            key_owner = user_id
-            is_blocked = True
-        else:
-            await query.edit_message_text("❌ You are not authorized to view this key.")
-            return
-
-    # اگر اونر ہے
-    else:
-        if key in access_data:
-            key_data = access_data[key]
-        elif key in blocked_data:
-            key_data = blocked_data[key]
-            is_blocked = True
-        else:
-            await query.edit_message_text("❌ Key not found.")
-            return
-
-    # ڈیٹیل بنانا
-    max_d = key_data.get("max_devices", 0)
-    used_d = len(key_data.get("devices", []))
-    exp = key_data.get("expiry", "N/A")
-
-    status = "🚫 Blocked" if is_blocked else "✅ Active"
+    status = "🚫 Blocked" if blocked else "✅ Active"
     device_text = f"{used_d}/{max_d if max_d != 9999 else '∞'} Devices"
-    toggle_text = "🔓 Unblock" if is_blocked else "🛑 Block"
 
     keyboard = [
         [InlineKeyboardButton("➕ Add Time", callback_data=f"addtime_{key}"),
          InlineKeyboardButton("🔄 Reset Devices", callback_data=f"resetdev_{key}")],
-        [InlineKeyboardButton(toggle_text, callback_data=f"access_toggle_{key}")],
+        [InlineKeyboardButton("🚫 Unblock" if blocked else "🛑 Block", callback_data=f"toggle_{key}")],
         [InlineKeyboardButton("🗑️ Delete", callback_data=f"delete_{key}")],
         [InlineKeyboardButton("🔙 Back", callback_data="my_keys")]
     ]
