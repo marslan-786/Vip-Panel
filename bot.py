@@ -223,26 +223,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_owner = user.id == OWNER_ID
     access_keys = load_access_keys()
 
-    # ڈیبگ: access_keys چیک کریں
     print("Access Keys Data:", access_keys)
 
+    # چیک کریں یوزر allowed ہے یا نہیں
     allowed = any(
         str(v.get("owner")) == user_id and not v.get("blocked", False)
         for v in access_keys.values()
     )
 
-    # ڈیبگ: permissions چیک کریں
-    print(f"User {user_id} | is_owner: {is_owner} | allowed: {allowed}")
+    # چیک کریں یوزر access_keys میں exist کرتا ہے یا نہیں
+    user_in_keys = any(
+        str(v.get("owner")) == user_id
+        for v in access_keys.values()
+    )
 
-    # میسج اور کی بورڈ تیار کریں
+    print(f"User {user_id} | is_owner: {is_owner} | allowed: {allowed} | in_keys: {user_in_keys}")
+
+    # Reply markup and text تیار کریں
     if is_owner or allowed:
         text = (
-            
-                 "🎉 *Welcome to Impossible Panel!*😍\n\n"
-                  "✨ *You are a Premium Member!* 🥰\n"
-                  "🟢 Your membership is *Successfully activated* ✅.\n\n"
-                  "👑 *Owner:* [@Only_Possible](https://t.me/Only_Possible)\n\n"
-                  "💡 To use the panel features, simply click the buttons below 👇"
+            "🎉 *Welcome to Impossible Panel!*😍\n\n"
+            "✨ *You are a Premium Member!* 🥰\n"
+            "🟢 Your membership is *Successfully activated* ✅.\n\n"
+            "👑 *Owner:* [@Only_Possible](https://t.me/Only_Possible)\n\n"
+            "💡 To use the panel features, simply click the buttons below 👇"
         )
         keyboard = [
             [InlineKeyboardButton("🔐 Generate Key", callback_data="generate_key")],
@@ -256,7 +260,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")],
                 [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
             ])
-    else:
+    elif not user_in_keys:
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
             "🚫 You are not authorized yet.\n"
@@ -265,13 +269,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
         ]
+    else:
+        # یوزر access_keys میں موجود ہے لیکن blocked ہے یا allow نہیں ہے، تو کچھ نہ بھیجیں
+        print(f"User {user_id} is in keys but not allowed. No message sent.")
+        return
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # میسج بھیجیں (پہلے update.message پر کوشش کریں، ورنہ context.bot سے)
     try:
         if update.message:
             await update.message.reply_text(
+                text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            )
+        elif update.callback_query:
+            await update.callback_query.message.reply_text(
                 text,
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
@@ -285,8 +299,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 disable_web_page_preview=True
             )
+        print(f"✅ Message sent to user {user_id}")
     except Exception as e:
-        print(f"Failed to send message to {user_id}: {e}")
+        print(f"❌ Failed to send message to {user_id}: {e}")
 
 def generate_random_key(length=12):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -583,7 +598,7 @@ async def save_access_key_and_reply(query, context, key):
     save_access_keys(access_data)
 
     await query.edit_message_text(
-        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}`",
+        f"✅ Access Key `{key}` created for {device_count if device_count != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start 😍",
         parse_mode="Markdown"
     )
     
@@ -619,13 +634,7 @@ async def backup_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 parse_mode="Markdown"
             )
 
-    await context.bot.send_message(chat_id=chat_id, text="📁 Backup مکمل ہو گیا ✅")
-    
-# /backup کمانڈ
-async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("📥 Save Data", callback_data="save_data")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("👇 Save current data before redeploy:", reply_markup=reply_markup)
+    await context.bot.send_message(chat_id=chat_id, text="📁 Backup مکمل ہو گیا ✅ Please Again /start")
     
 async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = context.user_data
@@ -718,7 +727,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         save_access_keys(access_data)
 
         await update.message.reply_text(
-            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}`",
+            f"✅ Access Key `{key}` created for {devices if devices != 9999 else '∞'} devices, valid till `{expiry}` Please Again /start 😍",
             parse_mode="Markdown"
         )
         return
@@ -728,7 +737,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     key_data = access_data.get(text)
 
     if not key_data:
-        await update.message.reply_text("❌ Invalid Access Key. Please check and try again.")
+        await update.message.reply_text("❌ Invalid Access Key. Please check and try again. /start 🙂")
         return
 
     if key_data.get("blocked", False):
@@ -840,18 +849,38 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("❌ Key not found")
 
     elif data == "back_main":
+        user_id = str(query.from_user.id)
+        is_owner = query.from_user.id == OWNER_ID
+        access_keys = load_access_keys()
+
+        allowed = any(
+            str(v.get("owner")) == user_id and not v.get("blocked", False)
+            for v in access_keys.values()
+        )
+
+        text = (
+            "🎉 *Welcome to Impossible Panel!*😍\n\n"
+            "✨ *You are a Premium Member!* 🥰\n"
+            "🟢 Your membership is *Successfully activated* ✅.\n\n"
+            "👑 *Owner:* [@Only_Possible](https://t.me/Only_Possible)\n\n"
+            "💡 To use the panel features, simply click the buttons below 👇"
+        )
         keyboard = [
             [InlineKeyboardButton("🔐 Generate Key", callback_data="generate_key")],
             [InlineKeyboardButton("📂 My Keys", callback_data="my_keys")],
-            [InlineKeyboardButton("🔌 Connect URL", callback_data="connect_url")]
+            [InlineKeyboardButton("🔌 Connect URL", callback_data="connect_url")],
+            [InlineKeyboardButton("👑 Owner", url="https://t.me/Only_Possible")]
         ]
-        if query.from_user.id == OWNER_ID:
-            keyboard.append([InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")])
-            keyboard.append([InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")])
-            keyboard.append([InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")])
+
+        if is_owner:
+            keyboard.extend([
+                [InlineKeyboardButton("🎫 Access Keys", callback_data="access_keys")],
+                [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")],
+                [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
+            ])
 
         await query.edit_message_text(
-            "🎉 *Welcome to Impossible Panel!*\n\nUse buttons below to manage your license keys:",
+            text=text,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
@@ -943,19 +972,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "add_custom_access":
         await query.edit_message_text("✏️ Send your custom access key like:\n`ACCESSKEY 7d 2v`", parse_mode="Markdown")
         user_data["awaiting_custom_access_key"] = True
-        
-    elif query.data == "save_data":
-        files = [
-            ("data/key.json", "🔑 key.json"),
-            ("data/users.json", "👤 users.json"),
-            ("data/blocked_users.json", "🚫 blocked_users.json")
-        ]
-
-        for file_path, caption in files:
-            if os.path.exists(file_path):
-                await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, 'rb'), caption=caption)
-            else:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ File not found: `{file_path}`", parse_mode='Markdown')
                 
     elif query.data == "backup_data":
         await backup_data_handler(update, context)
