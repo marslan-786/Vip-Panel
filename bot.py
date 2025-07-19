@@ -261,8 +261,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
             ])
     
-    # ✅ اگر یوزر access_keys میں نہیں ہے → unauthorized welcome message دکھاؤ
-    elif not user_in_keys or len(access_keys) == 0:
+    # ✅ اگر access_keys خالی ہے یا user موجود نہیں ہے → unauthorized welcome message
+    elif not user_in_keys and len(access_keys) == 0:
+        text = (
+            "🔐 *Welcome to Impossible Panel!*\n\n"
+            "🚫 You are not authorized yet.\n"
+            "🎫 To get access, buy a key from @Only_Possible"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
+        ]
+
+    elif not user_in_keys:
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
             "🚫 You are not authorized yet.\n"
@@ -273,7 +283,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
     # ❌ اگر یوزر access_keys میں ہے لیکن blocked ہے یا allowed نہیں ہے → کچھ نہ بھیجو
-   
+    else:
+        print(f"User {user_id} is in keys but not allowed. No message sent.")
         return
 
     # ریپلائی میسج سینڈ کرو
