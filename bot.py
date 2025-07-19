@@ -225,21 +225,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     print("Access Keys Data:", access_keys)
 
-    # چیک کریں یوزر allowed ہے یا نہیں
-    allowed = any(
-        str(v.get("owner")) == user_id and not v.get("blocked", False)
-        for v in access_keys.values()
-    )
-
-    # چیک کریں یوزر access_keys میں exist کرتا ہے یا نہیں
+    # چیک کریں کہ یوزر access_keys میں ہے یا نہیں
     user_in_keys = any(
         str(v.get("owner")) == user_id
         for v in access_keys.values()
     )
 
+    # چیک کریں یوزر allowed ہے یا نہیں (یعنی blocked نہ ہو)
+    allowed = any(
+        str(v.get("owner")) == user_id and not v.get("blocked", False)
+        for v in access_keys.values()
+    )
+
     print(f"User {user_id} | is_owner: {is_owner} | allowed: {allowed} | in_keys: {user_in_keys}")
 
-    # Reply markup and text تیار کریں
+    # ✅ اگر یوزر is_owner یا allowed ہے → Premium Welcome Menu
     if is_owner or allowed:
         text = (
             "🎉 *Welcome to Impossible Panel!*😍\n\n"
@@ -260,7 +260,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📂 Show My Access Keys", callback_data="show_my_access_keys")],
                 [InlineKeyboardButton("📤 Backup Data", callback_data="backup_data")]
             ])
-    elif not user_in_keys:
+    
+    # ✅ اگر یوزر access_keys میں نہیں ہے → unauthorized welcome message دکھاؤ
+    elif not user_in_keys or len(access_keys) == 0:
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
             "🚫 You are not authorized yet.\n"
@@ -269,11 +271,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
         ]
-    else:
-        # یوزر access_keys میں موجود ہے لیکن blocked ہے یا allow نہیں ہے، تو کچھ نہ بھیجیں
-        print(f"User {user_id} is in keys but not allowed. No message sent.")
+
+    # ❌ اگر یوزر access_keys میں ہے لیکن blocked ہے یا allowed نہیں ہے → کچھ نہ بھیجو
+   
         return
 
+    # ریپلائی میسج سینڈ کرو
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
