@@ -268,7 +268,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             "🔐 *Welcome to Impossible Panel!*\n\n"
             "🚫 You are not authorized yet.\n"
-            "🎫 To get access, buy a key from @Only_Possible"
+            "🎫 To get access, buy a key from 👇"
         )
         keyboard = [
             [InlineKeyboardButton("🛒 Buy Access Key", url="https://t.me/Only_Possible")]
